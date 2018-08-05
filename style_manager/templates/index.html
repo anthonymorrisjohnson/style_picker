@@ -1,0 +1,16 @@
+{% if models %}
+    <ul>
+    {% for model in models %}
+        <li>{{ model.title }} {{ model.is_ready }}</li>
+        {%  if model.is_ready %}
+        <li> <a href="{% url 'activate_model' %}" > activate </a></li>
+        {%  endif %}
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>No models are available.</p>
+{% endif %}
+
+    <p>
+    <a href="{% url 'upload_file' %}" > Click here to add new models </a>
+    </p>
