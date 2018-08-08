@@ -1,10 +1,7 @@
 {% if models %}
     <ul>
     {% for model in models %}
-        <li>{{ model.title }} {{ model.is_ready }}</li>
-        {%  if model.is_ready %}
-        <li> <a href="{% url 'activate_model' %}" > activate </a></li>
-        {%  endif %}
+        <li>{{ model.title }} {{ model.is_ready }} {{ model.is_active }} <a href="{% url 'activate_model' id=model.pk%}" > activate </a></li>
     {% endfor %}
     </ul>
 {% else %}

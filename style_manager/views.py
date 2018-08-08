@@ -28,10 +28,10 @@ def activate(request, id):
     return redirect('index')
 
 def current_model(request):
-    current_model = Style.objects.filter(is_active=True)
+    current_model = Style.objects.filter(is_active=True).values()
     #throw an exception if we don't have anything active
-    data = serializers.serialize('json', current_model)
-    return JsonResponse(data, safe=False)
+    #data = serializers.serialize('json', current_model)
+    return JsonResponse(list(current_model), safe=False)
 
 def upload_file(request):
     if request.method == 'POST':

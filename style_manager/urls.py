@@ -5,6 +5,6 @@ from . import views
 urlpatterns = [
     path('upload', views.upload_file, name='upload_file'),
     path('', views.index, name='index'),
-    path('activate/<int:id>', views.activate, name='activate'),
+    path('activate/<int:id>', views.activate, name='activate_model'),
     path('current_model', views.current_model)
 ]
