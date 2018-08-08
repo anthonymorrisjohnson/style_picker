@@ -89,7 +89,7 @@ def main(unused_argv=None):
 
     # Set resolution
     # if resolution is not None:
-    x_length, y_length = (500, 500)
+    x_length, y_length = (1280, 1080)
     cap.set(3, x_length)  # 3 and 4 are OpenCV property IDs.
     cap.set(4, y_length)
     x_new = int(cap.get(3))

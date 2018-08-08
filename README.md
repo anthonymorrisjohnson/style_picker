@@ -1,3 +1,10 @@
+#mac setup
+install anaconda with python 3.6
+install tensorflow
+install magenta
+
+pip install magenta
+
 
 
 
@@ -13,4 +20,13 @@ arbitrary_image_stylization_with_weights \
   --style_square_crop=False \
   --logtostderr
   
-  
+#running web cam version (with camera 0 - replace with 1 for plugged in device)
+python ./arbitrary_image_stylization_cam.py \
+ --checkpoint=arbitrary_style_transfer/model.ckpt \ 
+ --output_dir=output/ \
+ --style_images_paths=images/style_images/aha_drawing.jpeg  \
+ --content_images_paths=images/content_images/*.jpg  \
+ --image_size=256   --content_square_crop=False \
+ --style_image_size=256  \
+ --style_square_crop=False   --logtostderr
+
