@@ -158,7 +158,7 @@ def main(unused_argv=None):
         #for style_i, style_img_path in enumerate(style_img_list):
         #if style_i > FLAGS.maximum_styles_to_evaluate:
         #    break
-        style_img_path = "../images/style_images/bricks_sq.jpg"
+        style_img_path = "../images/style_images/towers_1916_sq.jpg"
         style_img_name = "bricks"
         style_image_np = image_utils.load_np_image_uint8(style_img_path)[:, :, :
                                                                            3]
