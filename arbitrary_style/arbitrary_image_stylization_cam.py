@@ -43,10 +43,10 @@ flags.DEFINE_string('style_images_paths', None, 'Paths to the style images'
 # flags.DEFINE_string('content_images_paths', None, 'Paths to the content images'
 #                    'for evaluation.')
 flags.DEFINE_string('output_dir', None, 'Output directory.')
-flags.DEFINE_integer('image_size', 256, 'Image size.')
+flags.DEFINE_integer('image_size', 768, 'Image size.')
 flags.DEFINE_boolean('content_square_crop', False, 'Wheather to center crop'
                                                    'the content image to be a square or not.')
-flags.DEFINE_integer('style_image_size', 256, 'Style image size.')
+flags.DEFINE_integer('style_image_size', 768, 'Style image size.')
 flags.DEFINE_boolean('style_square_crop', False, 'Wheather to center crop'
                                                  'the style image to be a square or not.')
 # flags.DEFINE_integer('maximum_styles_to_evaluate', 1024, 'Maximum number of'
@@ -73,7 +73,11 @@ def display_np_image(image):
   #buf = io.BytesIO()
   image = np.squeeze(image, 0)
   #scipy.misc.imsave(buf, np.squeeze(image, 0), format=save_format)
-  cv2.imshow('frame', image)
+  #cv2.imshow('frame', image)
+  cv2.namedWindow("window", cv2.WND_PROP_FULLSCREEN)
+  cv2.moveWindow("window", -2000, -3000)            
+  cv2.setWindowProperty("window",cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
+  cv2.imshow("window", image)
   #buf.seek(0)
   #f = tf.gfile.GFile(output_file, 'w')
   #f.write(buf.getvalue())
@@ -85,11 +89,11 @@ def main(unused_argv=None):
         tf.gfile.MkDir(FLAGS.output_dir)
 
     # Instantiate video capture object.
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
 
     # Set resolution
     # if resolution is not None:
-    x_length, y_length = (1280, 1080)
+    x_length, y_length = (768, 768)
     cap.set(3, x_length)  # 3 and 4 are OpenCV property IDs.
     cap.set(4, y_length)
     x_new = int(cap.get(3))
@@ -146,6 +150,35 @@ def main(unused_argv=None):
         # Gets list of input content images.
         #content_img_list = tf.gfile.Glob(FLAGS.content_images_paths)
 
+        # if style_i % 10 == 0:
+        #tf.logging.info('Stylizing  %s with (%d) %s' %
+        #                        ( content_img_name, style_i,
+        #                         style_img_name))
+
+        #for style_i, style_img_path in enumerate(style_img_list):
+        #if style_i > FLAGS.maximum_styles_to_evaluate:
+        #    break
+        style_img_path = "../images/style_images/bricks_sq.jpg"
+        style_img_name = "bricks"
+        style_image_np = image_utils.load_np_image_uint8(style_img_path)[:, :, :
+                                                                           3]
+
+        # Saves preprocessed style image.
+        style_img_croped_resized_np = sess.run(
+        style_img_preprocessed, feed_dict={
+                        style_img_ph: style_image_np
+                    })
+        image_utils.save_np_image(style_img_croped_resized_np,
+                                          os.path.join(FLAGS.output_dir,
+                                                       '%s.jpg' % (style_img_name)))
+
+        # Computes bottleneck features of the style prediction network for the
+        # given style image.
+        style_params = sess.run(
+                    bottleneck_feat, feed_dict={style_img_ph: style_image_np})
+
+        interpolation_weights = ast.literal_eval(FLAGS.interpolation_weights)
+
         while True:
             # for content_i, content_img_path in enumerate(content_img_list):
             ret, frame = cap.read()
@@ -161,67 +194,40 @@ def main(unused_argv=None):
                 content_img_preprocessed, feed_dict={
                     content_img_ph: content_img_np
                 })
-            image_utils.save_np_image(inp_img_croped_resized_np,
-                                      os.path.join(FLAGS.output_dir,
-                                                   '%s.jpg' % (content_img_name)))
+            #image_utils.save_np_image(inp_img_croped_resized_np,
+            #                          os.path.join(FLAGS.output_dir,
+            #                                       '%s.jpg' % (content_img_name)))
 
             # Computes bottleneck features of the style prediction network for the
             # identity transform.
             identity_params = sess.run(
-                bottleneck_feat, feed_dict={style_img_ph: content_img_np})
+              bottleneck_feat, feed_dict={style_img_ph: content_img_np})
+            
 
-            for style_i, style_img_path in enumerate(style_img_list):
-                #if style_i > FLAGS.maximum_styles_to_evaluate:
-                #    break
-                style_img_name = os.path.basename(style_img_path)[:-4]
-                style_image_np = image_utils.load_np_image_uint8(style_img_path)[:, :, :
-                                                                                       3]
-
-                # if style_i % 10 == 0:
-                tf.logging.info('Stylizing  %s with (%d) %s' %
-                                ( content_img_name, style_i,
-                                 style_img_name))
-
-                # Saves preprocessed style image.
-                style_img_croped_resized_np = sess.run(
-                    style_img_preprocessed, feed_dict={
-                        style_img_ph: style_image_np
-                    })
-                image_utils.save_np_image(style_img_croped_resized_np,
-                                          os.path.join(FLAGS.output_dir,
-                                                       '%s.jpg' % (style_img_name)))
-
-
-                # Computes bottleneck features of the style prediction network for the
-                # given style image.
-                style_params = sess.run(
-                    bottleneck_feat, feed_dict={style_img_ph: style_image_np})
-
-                interpolation_weights = ast.literal_eval(FLAGS.interpolation_weights)
-                # Interpolates between the parameters of the identity transform and
-                # style parameters of the given style image.
-                for interp_i, wi in enumerate(interpolation_weights):
-                    stylized_image_res = sess.run(
-                        stylized_images,
-                        feed_dict={
-                            bottleneck_feat:
-                                identity_params * (1 - wi) + style_params * wi,
-                            content_img_ph:
-                                content_img_np
-                        })
-
-                    # Saves stylized image.
-                    image_utils.save_np_image(
-                        stylized_image_res,
-                        os.path.join(FLAGS.output_dir, '%s_stylized_%s_%d.jpg' %
-                                     (content_img_name, style_img_name, interp_i)))
-                    display_np_image(stylized_image_res)
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
-                    #img_out = np.squeeze(stylized_image_res).astype(np.uint8)
-                    #img_out = cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB)
-                    #cv2.imshow('frame', img_out)
-
+            # Interpolates between the parameters of the identity transform and
+            # style parameters of the given style image.
+            for interp_i, wi in enumerate(interpolation_weights):
+              stylized_image_res = sess.run(
+                stylized_images,
+                feed_dict={
+                  bottleneck_feat:
+                  identity_params * (1 - wi) + style_params * wi,
+                  content_img_ph:
+                  content_img_np
+                })
+            
+            # Saves stylized image.
+            #image_utils.save_np_image(
+            #  stylized_image_res,
+            #  os.path.join(FLAGS.output_dir, '%s_stylized_%s_%d.jpg' %
+            #               (content_img_name, style_img_name, interp_i)))
+            display_np_image(stylized_image_res)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+              break
+            #img_out = np.squeeze(stylized_image_res).astype(np.uint8)
+            #img_out = cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB)
+            #cv2.imshow('frame', img_out)
+              
     cap.release()
     cv2.destroyAllWindows()
 
