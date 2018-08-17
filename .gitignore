@@ -105,3 +105,8 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+/arbitrary_style/arbitrary_style_transfer/model.ckpt.data-00000-of-00001
+/arbitrary_style/arbitrary_style_transfer/model.ckpt.meta
+/arbitrary_style/arbitrary_style_transfer/model.ckpt.index
+/arbitrary_style/arbitrary_style_transfer.tar.gz
+/arbitrary_style/output/
