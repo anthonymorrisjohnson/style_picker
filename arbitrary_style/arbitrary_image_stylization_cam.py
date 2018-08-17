@@ -26,9 +26,22 @@ from __future__ import print_function
 
 import ast
 import os
+import sys
+import django
 
 import numpy as np
 import tensorflow as tf
+
+sys.path.append(".")
+print(sys.path)
+
+from timeit import default_timer as timer
+
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "style_picker.settings")
+django.setup()
+
+from style_manager.models import Style
 
 from magenta.models.arbitrary_image_stylization import arbitrary_image_stylization_build_model as build_model
 from magenta.models.image_stylization import image_utils
@@ -60,28 +73,33 @@ flags.DEFINE_string('interpolation_weights', '[1.0]', 'List of weights'
 
 FLAGS = flags.FLAGS
 
-def display_np_image(image):
-  """Saves an image to disk.
 
-  Args:
-    image: 3-D numpy array of shape [image_size, image_size, 3] and dtype
-        float32, with values in [0, 1].
-    output_file: str, output file.
-    save_format: format for saving image (eg. jpeg).
-  """
-  image = np.uint8(image * 255.0)
-  #buf = io.BytesIO()
-  image = np.squeeze(image, 0)
-  #scipy.misc.imsave(buf, np.squeeze(image, 0), format=save_format)
-  #cv2.imshow('frame', image)
-  cv2.namedWindow("window", cv2.WND_PROP_FULLSCREEN)
-  cv2.moveWindow("window", -2000, -3000)            
-  cv2.setWindowProperty("window",cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
-  cv2.imshow("window", image)
-  #buf.seek(0)
-  #f = tf.gfile.GFile(output_file, 'w')
-  #f.write(buf.getvalue())
-  #f.close()
+def display_np_image(image, fullscreen=False):
+    """Saves an image to disk.
+
+    Args:
+      image: 3-D numpy array of shape [image_size, image_size, 3] and dtype
+          float32, with values in [0, 1].
+      output_file: str, output file.
+      save_format: format for saving image (eg. jpeg).
+    """
+    image = np.uint8(image * 255.0)
+    # buf = io.BytesIO()
+    image = np.squeeze(image, 0)
+    # scipy.misc.imsave(buf, np.squeeze(image, 0), format=save_format)
+    # cv2.imshow('frame', image)
+    if fullscreen:
+        cv2.namedWindow("window", cv2.WND_PROP_FULLSCREEN)
+        cv2.moveWindow("window", -2000, -3000)
+        cv2.setWindowProperty("window", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        cv2.imshow("window", image)
+    else:
+        cv2.imshow('frame', image)
+    # buf.seek(0)
+    # f = tf.gfile.GFile(output_file, 'w')
+    # f.write(buf.getvalue())
+    # f.close()
+
 
 def main(unused_argv=None):
     tf.logging.set_verbosity(tf.logging.INFO)
@@ -89,7 +107,7 @@ def main(unused_argv=None):
         tf.gfile.MkDir(FLAGS.output_dir)
 
     # Instantiate video capture object.
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
 
     # Set resolution
     # if resolution is not None:
@@ -142,40 +160,42 @@ def main(unused_argv=None):
 
         # Gets the list of the input style images.
         style_img_list = tf.gfile.Glob(FLAGS.style_images_paths)
-        #if len(style_img_list) > FLAGS.maximum_styles_to_evaluate:
+        # if len(style_img_list) > FLAGS.maximum_styles_to_evaluate:
         #    np.random.seed(1234)
         #    style_img_list = np.random.permutation(style_img_list)
         #    style_img_list = style_img_list[:FLAGS.maximum_styles_to_evaluate]
 
-        # Gets list of input content images.
-        #content_img_list = tf.gfile.Glob(FLAGS.content_images_paths)
+        # Gets list of input co ntent images.
+        # content_img_list = tf.gfile.Glob(FLAGS.content_images_paths)
 
         # if style_i % 10 == 0:
-        #tf.logging.info('Stylizing  %s with (%d) %s' %
+        # tf.logging.info('Stylizing  %s with (%d) %s' %
         #                        ( content_img_name, style_i,
         #                         style_img_name))
 
-        #for style_i, style_img_path in enumerate(style_img_list):
-        #if style_i > FLAGS.maximum_styles_to_evaluate:
+        # for style_i, style_img_path in enumerate(style_img_list):
+        # if style_i > FLAGS.maximum_styles_to_evaluate:
         #    break
-        style_img_path = "../images/style_images/towers_1916_sq.jpg"
+        activate_style = Style.objects.filter(is_active=True).first()
+        style_img_path = activate_style.source_file.path
+        print("current image is " + style_img_path)
         style_img_name = "bricks"
         style_image_np = image_utils.load_np_image_uint8(style_img_path)[:, :, :
-                                                                           3]
+                                                                               3]
 
         # Saves preprocessed style image.
         style_img_croped_resized_np = sess.run(
-        style_img_preprocessed, feed_dict={
-                        style_img_ph: style_image_np
-                    })
+            style_img_preprocessed, feed_dict={
+                style_img_ph: style_image_np
+            })
         image_utils.save_np_image(style_img_croped_resized_np,
-                                          os.path.join(FLAGS.output_dir,
-                                                       '%s.jpg' % (style_img_name)))
+                                  os.path.join(FLAGS.output_dir,
+                                               '%s.jpg' % (style_img_name)))
 
         # Computes bottleneck features of the style prediction network for the
         # given style image.
         style_params = sess.run(
-                    bottleneck_feat, feed_dict={style_img_ph: style_image_np})
+            bottleneck_feat, feed_dict={style_img_ph: style_image_np})
 
         interpolation_weights = ast.literal_eval(FLAGS.interpolation_weights)
 
@@ -183,51 +203,55 @@ def main(unused_argv=None):
             # for content_i, content_img_path in enumerate(content_img_list):
             ret, frame = cap.read()
             content_img_np = frame
-            #content_img_np = image_utils.load_np_image_uint8(content_img_path)[:, :, :
+            # content_img_np = image_utils.load_np_image_uint8(content_img_path)[:, :, :
             #                                                                        3]
 
-            #content_img_name = os.path.basename(content_img_path)[:-4]
+            # content_img_name = os.path.basename(content_img_path)[:-4]
             content_img_name = "webcam"
-
+            start = timer()
             # Saves preprocessed content image.
             inp_img_croped_resized_np = sess.run(
                 content_img_preprocessed, feed_dict={
                     content_img_ph: content_img_np
                 })
-            #image_utils.save_np_image(inp_img_croped_resized_np,
+            # image_utils.save_np_image(inp_img_croped_resized_np,
             #                          os.path.join(FLAGS.output_dir,
             #                                       '%s.jpg' % (content_img_name)))
 
             # Computes bottleneck features of the style prediction network for the
             # identity transform.
             identity_params = sess.run(
-              bottleneck_feat, feed_dict={style_img_ph: content_img_np})
-            
+                bottleneck_feat, feed_dict={style_img_ph: content_img_np})
 
             # Interpolates between the parameters of the identity transform and
             # style parameters of the given style image.
             for interp_i, wi in enumerate(interpolation_weights):
-              stylized_image_res = sess.run(
-                stylized_images,
-                feed_dict={
-                  bottleneck_feat:
-                  identity_params * (1 - wi) + style_params * wi,
-                  content_img_ph:
-                  content_img_np
-                })
-            
+                stylized_image_res = sess.run(
+                    stylized_images,
+                    feed_dict={
+                        bottleneck_feat:
+                            identity_params * (1 - wi) + style_params * wi,
+                        content_img_ph:
+                            content_img_np
+                    })
+
+            end = timer()
+            print(end - start)
+
             # Saves stylized image.
-            #image_utils.save_np_image(
+            # image_utils.save_np_image(
             #  stylized_image_res,
             #  os.path.join(FLAGS.output_dir, '%s_stylized_%s_%d.jpg' %
             #               (content_img_name, style_img_name, interp_i)))
             display_np_image(stylized_image_res)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-              break
+            # if cv2.waitKey(1) & 0xFF == ord('q'):
+            #  break
             #img_out = np.squeeze(stylized_image_res).astype(np.uint8)
             #img_out = cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB)
             #cv2.imshow('frame', img_out)
-              
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
     cap.release()
     cv2.destroyAllWindows()
 

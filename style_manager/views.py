@@ -42,7 +42,7 @@ def upload_file(request):
             form.save()
             print('form saved')
             #print(form)
-            process_style.delay(form.instance.source_file.url)
+            #process_style.delay(form.instance.source_file.url)
             print("submitted to queue")
             return redirect("index")
         else:

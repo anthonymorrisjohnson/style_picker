@@ -21,8 +21,8 @@ arbitrary_image_stylization_with_weights \
   --logtostderr
   
 #running web cam version (with camera 0 - replace with 1 for plugged in device)
-python ./arbitrary_image_stylization_cam.py \
- --checkpoint=arbitrary_style_transfer/model.ckpt \ 
+python ./arbitrary_style/arbitrary_image_stylization_cam.py \
+ --checkpoint=arbitrary_style/arbitrary_style_transfer/model.ckpt \
  --output_dir=output/ \
  --style_images_paths=images/style_images/aha_drawing.jpeg  \
  --content_images_paths=images/content_images/*.jpg  \
