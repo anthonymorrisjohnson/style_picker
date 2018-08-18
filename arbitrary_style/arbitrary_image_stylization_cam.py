@@ -55,16 +55,17 @@ flags.DEFINE_string('checkpoint', None, 'Path to the model checkpoint.')
 #                                                'for evaluation.')
 # flags.DEFINE_string('content_images_paths', None, 'Paths to the content images'
 #                    'for evaluation.')
+
 #flags.DEFINE_string('output_dir', 'output', 'Output directory.')
 flags.DEFINE_integer('image_size', 768, 'Image size.')
 flags.DEFINE_boolean('content_square_crop', False, 'Wheather to center crop'
                                                    'the content image to be a square or not.')
-flags.DEFINE_integer('style_image_size', 768, 'Style image size.')
+flags.DEFINE_integer('style_image_size', 1200, 'Style image size.')
 flags.DEFINE_boolean('style_square_crop', False, 'Wheather to center crop'
                                                  'the style image to be a square or not.')
 # flags.DEFINE_integer('maximum_styles_to_evaluate', 1024, 'Maximum number of'
 #                     'styles to evaluate.')
-flags.DEFINE_string('interpolation_weights', '[1.0]', 'List of weights'
+flags.DEFINE_string('interpolation_weights', '[0.5]', 'List of weights'
                                                       'for interpolation between the parameters of the identity'
                                                       'transform and the style parameters of the style image. The'
                                                       'larger the weight is the strength of stylization is more.'
@@ -180,8 +181,7 @@ def main(unused_argv=None):
         style_img_path = activate_style.source_file.path
         print("current image is " + style_img_path)
         style_img_name = "bricks"
-        style_image_np = image_utils.load_np_image_uint8(style_img_path)[:, :, :
-                                                                               3]
+        style_image_np = image_utils.load_np_image_uint8(style_img_path)[:, :, :3]
 
         # Saves preprocessed style image.
         style_img_croped_resized_np = sess.run(
@@ -202,8 +202,9 @@ def main(unused_argv=None):
         while True:
             # for content_i, content_img_path in enumerate(content_img_list):
             ret, frame = cap.read()
-            content_img_np = frame
-            print("input :" + str(content_img_np.shape))
+            #crop to get the weird 1200x200 format
+            content_img_np = frame[:200, :1200 ]
+            print("cropped image:" + str(content_img_np.shape))
             # content_img_np = image_utils.load_np_image_uint8(content_img_path)[:, :, :
             #                                                                        3]
 
@@ -211,6 +212,7 @@ def main(unused_argv=None):
             content_img_name = "webcam"
             start = timer()
             # Saves preprocessed content image.
+            print("Input image:" + str(content_img_np.shape))
             inp_img_croped_resized_np = sess.run(
                 content_img_preprocessed, feed_dict={
                     content_img_ph: content_img_np
@@ -245,6 +247,7 @@ def main(unused_argv=None):
             #  os.path.join(FLAGS.output_dir, '%s_stylized_%s_%d.jpg' %
             #               (content_img_name, style_img_name, interp_i)))
             display_np_image(stylized_image_res, True)
+            print(stylized_image_res.shape)
             # if cv2.waitKey(1) & 0xFF == ord('q'):
             #  break
             #img_out = np.squeeze(stylized_image_res).astype(np.uint8)
