@@ -51,11 +51,11 @@ slim = tf.contrib.slim
 
 flags = tf.flags
 flags.DEFINE_string('checkpoint', None, 'Path to the model checkpoint.')
-flags.DEFINE_string('style_images_paths', None, 'Paths to the style images'
-                                                'for evaluation.')
+#flags.DEFINE_string('style_images_paths', None, 'Paths to the style images'
+#                                                'for evaluation.')
 # flags.DEFINE_string('content_images_paths', None, 'Paths to the content images'
 #                    'for evaluation.')
-flags.DEFINE_string('output_dir', None, 'Output directory.')
+#flags.DEFINE_string('output_dir', 'output', 'Output directory.')
 flags.DEFINE_integer('image_size', 768, 'Image size.')
 flags.DEFINE_boolean('content_square_crop', False, 'Wheather to center crop'
                                                    'the content image to be a square or not.')
@@ -103,15 +103,15 @@ def display_np_image(image, fullscreen=False):
 
 def main(unused_argv=None):
     tf.logging.set_verbosity(tf.logging.INFO)
-    if not tf.gfile.Exists(FLAGS.output_dir):
-        tf.gfile.MkDir(FLAGS.output_dir)
+    #if not tf.gfile.Exists(FLAGS.output_dir):
+    #    tf.gfile.MkDir(FLAGS.output_dir)
 
     # Instantiate video capture object.
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
 
     # Set resolution
     # if resolution is not None:
-    x_length, y_length = (768, 768)
+    x_length, y_length = (1200, 200)
     cap.set(3, x_length)  # 3 and 4 are OpenCV property IDs.
     cap.set(4, y_length)
     x_new = int(cap.get(3))
@@ -159,7 +159,7 @@ def main(unused_argv=None):
         init_fn(sess)
 
         # Gets the list of the input style images.
-        style_img_list = tf.gfile.Glob(FLAGS.style_images_paths)
+        #style_img_list = tf.gfile.Glob(FLAGS.style_images_paths)
         # if len(style_img_list) > FLAGS.maximum_styles_to_evaluate:
         #    np.random.seed(1234)
         #    style_img_list = np.random.permutation(style_img_list)
@@ -188,9 +188,9 @@ def main(unused_argv=None):
             style_img_preprocessed, feed_dict={
                 style_img_ph: style_image_np
             })
-        image_utils.save_np_image(style_img_croped_resized_np,
-                                  os.path.join(FLAGS.output_dir,
-                                               '%s.jpg' % (style_img_name)))
+        #image_utils.save_np_image(style_img_croped_resized_np,
+        #                          os.path.join(FLAGS.output_dir,
+        #                                       '%s.jpg' % (style_img_name)))
 
         # Computes bottleneck features of the style prediction network for the
         # given style image.
@@ -203,6 +203,7 @@ def main(unused_argv=None):
             # for content_i, content_img_path in enumerate(content_img_list):
             ret, frame = cap.read()
             content_img_np = frame
+            print("input :" + str(content_img_np.shape))
             # content_img_np = image_utils.load_np_image_uint8(content_img_path)[:, :, :
             #                                                                        3]
 
@@ -237,13 +238,13 @@ def main(unused_argv=None):
 
             end = timer()
             print(end - start)
-
+            print(stylized_image_res.shape)
             # Saves stylized image.
             # image_utils.save_np_image(
             #  stylized_image_res,
             #  os.path.join(FLAGS.output_dir, '%s_stylized_%s_%d.jpg' %
             #               (content_img_name, style_img_name, interp_i)))
-            display_np_image(stylized_image_res)
+            display_np_image(stylized_image_res, True)
             # if cv2.waitKey(1) & 0xFF == ord('q'):
             #  break
             #img_out = np.squeeze(stylized_image_res).astype(np.uint8)
