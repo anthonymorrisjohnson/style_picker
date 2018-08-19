@@ -28,6 +28,7 @@ import ast
 import os
 import sys
 import django
+from screeninfo import get_monitors
 
 import numpy as np
 import tensorflow as tf
@@ -65,12 +66,13 @@ flags.DEFINE_boolean('style_square_crop', False, 'Wheather to center crop'
                                                  'the style image to be a square or not.')
 # flags.DEFINE_integer('maximum_styles_to_evaluate', 1024, 'Maximum number of'
 #                     'styles to evaluate.')
-flags.DEFINE_string('interpolation_weights', '[0.5]', 'List of weights'
+flags.DEFINE_float('interpolation_weight', 1.0, 'weight'
                                                       'for interpolation between the parameters of the identity'
                                                       'transform and the style parameters of the style image. The'
                                                       'larger the weight is the strength of stylization is more.'
                                                       'Weight of 1.0 means the normal style transfer and weight'
                                                       'of 0.0 means identity transform.')
+flags.DEFINE_boolean('showFullScreen', False, 'Whether to show full screen')
 
 FLAGS = flags.FLAGS
 
@@ -89,11 +91,24 @@ def display_np_image(image, fullscreen=False):
     image = np.squeeze(image, 0)
     # scipy.misc.imsave(buf, np.squeeze(image, 0), format=save_format)
     # cv2.imshow('frame', image)
+    font = cv2.FONT_HERSHEY_PLAIN
+    helpText = "Bus leaves at 4am"
+    #cv2.putText(image, helpText, (10,20), font, 30, (255,255,255), 20)
+    img_out = cv2.putText(image, 'bus leaving the playa at 2AM', (50, 50),
+    cv2.FONT_HERSHEY_SIMPLEX,
+                           1.0, (255, 0, 0), 3)
+    #for m in get_monitors():
+    #    print(str(m))
+    
     if fullscreen:
+        #hard code screensize
+        blank_image = np.zeros((1080,1920,3), np.uint8)
+        blank_image[0:image.shape[0], 0:image.shape[1]] = image
+        
         cv2.namedWindow("window", cv2.WND_PROP_FULLSCREEN)
-        cv2.moveWindow("window", -2000, -3000)
+        cv2.moveWindow("window", 0, 1000)
         cv2.setWindowProperty("window", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        cv2.imshow("window", image)
+        cv2.imshow("window", blank_image)
     else:
         cv2.imshow('frame', image)
     # buf.seek(0)
@@ -177,40 +192,45 @@ def main(unused_argv=None):
         # for style_i, style_img_path in enumerate(style_img_list):
         # if style_i > FLAGS.maximum_styles_to_evaluate:
         #    break
-        activate_style = Style.objects.filter(is_active=True).first()
-        style_img_path = activate_style.source_file.path
-        print("current image is " + style_img_path)
-        style_img_name = "bricks"
-        style_image_np = image_utils.load_np_image_uint8(style_img_path)[:, :, :3]
-
-        # Saves preprocessed style image.
-        style_img_croped_resized_np = sess.run(
-            style_img_preprocessed, feed_dict={
-                style_img_ph: style_image_np
-            })
-        #image_utils.save_np_image(style_img_croped_resized_np,
-        #                          os.path.join(FLAGS.output_dir,
-        #                                       '%s.jpg' % (style_img_name)))
-
-        # Computes bottleneck features of the style prediction network for the
-        # given style image.
-        style_params = sess.run(
-            bottleneck_feat, feed_dict={style_img_ph: style_image_np})
-
-        interpolation_weights = ast.literal_eval(FLAGS.interpolation_weights)
+        interpolation_weight = FLAGS.interpolation_weight       
 
         while True:
+            start = timer()
+            #calculating style isn't the major FPS bottleneck
+            activate_style = Style.objects.filter(is_active=True).first()
+            style_img_path = activate_style.source_file.path
+            print("current image is " + style_img_path)
+            style_img_name = "bricks"
+            style_image_np = image_utils.load_np_image_uint8(style_img_path)[:, :, :3]
+
+            # Saves preprocessed style image.
+            style_img_croped_resized_np = sess.run(
+                style_img_preprocessed, feed_dict={
+                    style_img_ph: style_image_np
+                })
+            #image_utils.save_np_image(style_img_croped_resized_np,
+            #                          os.path.join(FLAGS.output_dir,
+            #                                       '%s.jpg' % (style_img_name)))
+            
+            # Computes bottleneck features of the style prediction network for the
+            # given style image.
+            style_params = sess.run(
+                bottleneck_feat, feed_dict={style_img_ph: style_image_np})
+
+
+            
             # for content_i, content_img_path in enumerate(content_img_list):
             ret, frame = cap.read()
+            print("webcam image: " + str(frame.shape))
             #crop to get the weird 1200x200 format
-            content_img_np = frame[:200, :1200 ]
+            content_img_np = frame[500:700, 200:1400 ]
             print("cropped image:" + str(content_img_np.shape))
             # content_img_np = image_utils.load_np_image_uint8(content_img_path)[:, :, :
             #                                                                        3]
 
             # content_img_name = os.path.basename(content_img_path)[:-4]
             content_img_name = "webcam"
-            start = timer()
+
             # Saves preprocessed content image.
             print("Input image:" + str(content_img_np.shape))
             inp_img_croped_resized_np = sess.run(
@@ -228,15 +248,15 @@ def main(unused_argv=None):
 
             # Interpolates between the parameters of the identity transform and
             # style parameters of the given style image.
-            for interp_i, wi in enumerate(interpolation_weights):
-                stylized_image_res = sess.run(
-                    stylized_images,
-                    feed_dict={
-                        bottleneck_feat:
-                            identity_params * (1 - wi) + style_params * wi,
-                        content_img_ph:
-                            content_img_np
-                    })
+            wi = interpolation_weight
+            stylized_image_res = sess.run(
+                stylized_images,
+                feed_dict={
+                    bottleneck_feat:
+                    identity_params * (1 - wi) + style_params * wi,
+                    content_img_ph:
+                    content_img_np
+            })
 
             end = timer()
             print(end - start)
@@ -246,15 +266,32 @@ def main(unused_argv=None):
             #  stylized_image_res,
             #  os.path.join(FLAGS.output_dir, '%s_stylized_%s_%d.jpg' %
             #               (content_img_name, style_img_name, interp_i)))
-            display_np_image(stylized_image_res, True)
+            display_np_image(stylized_image_res, FLAGS.showFullScreen)
             print(stylized_image_res.shape)
             # if cv2.waitKey(1) & 0xFF == ord('q'):
             #  break
             #img_out = np.squeeze(stylized_image_res).astype(np.uint8)
             #img_out = cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB)
             #cv2.imshow('frame', img_out)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            
+            
+            key = cv2.waitKey(10)
+            print("Key " + str(key))
+            if key == 27:
+                break;
+            elif key == 192:
+                FLAGS.showFullScreen = False
+                cv2.setWindowProperty("window", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
+            elif (key == 233 or key == 193):
+                FLAGS.showFullScreen = True
+                cv2.setWindowProperty("window", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+            elif key == 60: # less
+                interpolation_weight -= 0.25
+            elif key == 62: # > more
+                interpolation_weight += 0.25
+
+            #if cv2.waitKey(1) & 0xFF == ord('q'):
+            #    break
 
     cap.release()
     cv2.destroyAllWindows()
