@@ -155,7 +155,7 @@ def style_prediction(style_input_,
     with tf.name_scope('bottleneck'):
       # (batch_size, 1, 1, depth).
       bottleneck_feat = tf.reduce_mean(
-          feat_convlayer, axis=[1, 2], keep_dims=True)
+          feat_convlayer, axis=[1, 2], keep_dims=True, name="bottleneck_feat")
 
     if style_prediction_bottleneck > 0:
       with slim.arg_scope(
@@ -165,7 +165,7 @@ def style_prediction(style_input_,
           trainable=trainable):
         # (batch_size, 1, 1, style_prediction_bottleneck).
         bottleneck_feat = slim.conv2d(bottleneck_feat,
-                                      style_prediction_bottleneck, [1, 1])
+                                      style_prediction_bottleneck, [1, 1], name="bottleneck_feat_2")
 
     style_params = {}
     with tf.variable_scope('style_params'):

@@ -37,7 +37,7 @@ sys.path.append(".")
 print(sys.path)
 
 from timeit import default_timer as timer
-
+_GPU_MEM_FRACTION = 0.30
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "style_picker.settings")
 django.setup()
@@ -49,6 +49,18 @@ from magenta.models.image_stylization import image_utils
 import cv2
 
 slim = tf.contrib.slim
+import tensorflow.contrib.tensorrt as trt
+from tensorflow.core.protobuf import config_pb2 as cpb2
+from tensorflow.core.protobuf import rewriter_config_pb2 as rwpb2
+from tensorflow.python.client import session as csess
+from tensorflow.python.framework import constant_op as cop
+from tensorflow.python.framework import dtypes as dtypes
+from tensorflow.python.framework import importer as importer
+from tensorflow.python.framework import ops as ops
+from tensorflow.python.ops import array_ops as aops
+from tensorflow.python.ops import math_ops as mops
+from tensorflow.python.ops import nn as nn
+from tensorflow.python.ops import nn_ops as nn_ops
 
 flags = tf.flags
 flags.DEFINE_string('checkpoint', None, 'Path to the model checkpoint.')
@@ -58,6 +70,7 @@ flags.DEFINE_string('checkpoint', None, 'Path to the model checkpoint.')
 #                    'for evaluation.')
 
 #flags.DEFINE_string('output_dir', 'output', 'Output directory.')
+flags.DEFINE_boolean('tensorrt', False, 'use tensorrt optimization for inference')
 flags.DEFINE_integer('image_size', 768, 'Image size.')
 flags.DEFINE_boolean('content_square_crop', False, 'Wheather to center crop'
                                                    'the content image to be a square or not.')
@@ -122,6 +135,15 @@ def main(unused_argv=None):
     #if not tf.gfile.Exists(FLAGS.output_dir):
     #    tf.gfile.MkDir(FLAGS.output_dir)
 
+    
+    if FLAGS.tensorrt:
+        gpu_options = None
+        print(trt.trt_convert.get_linked_tensorrt_version())
+        gpu_options = cpb2.GPUOptions(per_process_gpu_memory_fraction=_GPU_MEM_FRACTION)
+        sessconfig = cpb2.ConfigProto(gpu_options=gpu_options)
+    else:
+        sessconfig = None
+    
     # Instantiate video capture object.
     cap = cv2.VideoCapture(1)
 
@@ -134,9 +156,13 @@ def main(unused_argv=None):
     y_new = int(cap.get(4))
     print('Resolution is: {0} by {1}'.format(x_new, y_new))
 
-    with tf.Graph().as_default(), tf.Session() as sess:
+    with tf.Graph().as_default(), tf.Session(config=sessconfig) as sess:
+
+        #TODO - calculate these dimensions dynamically (they can't use None since TensorRT
+        # needs precalculated dimensions
+        
         # Defines place holder for the style image.
-        style_img_ph = tf.placeholder(tf.float32, shape=[None, None, 3])
+        style_img_ph = tf.placeholder(tf.float32, shape=[200, 1200, 3], name="style_img_ph")
         if FLAGS.style_square_crop:
             style_img_preprocessed = image_utils.center_crop_resize_image(
                 style_img_ph, FLAGS.style_image_size)
@@ -145,7 +171,7 @@ def main(unused_argv=None):
                                                               FLAGS.style_image_size)
 
         # Defines place holder for the content image.
-        content_img_ph = tf.placeholder(tf.float32, shape=[None, None, 3])
+        content_img_ph = tf.placeholder(tf.float32, shape=[200, 1200, 3], name="content_img_ph")
         if FLAGS.content_square_crop:
             content_img_preprocessed = image_utils.center_crop_resize_image(
                 content_img_ph, FLAGS.image_size)
@@ -163,6 +189,10 @@ def main(unused_argv=None):
             style_prediction_bottleneck=100,
             adds_losses=False)
 
+        print(stylized_images)
+        print(bottleneck_feat)
+
+    
         if tf.gfile.IsDirectory(FLAGS.checkpoint):
             checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint)
         else:
@@ -174,6 +204,35 @@ def main(unused_argv=None):
         sess.run([tf.local_variables_initializer()])
         init_fn(sess)
 
+        tf.train.write_graph(sess.graph_def, '.', 'model.pbtxt')
+        
+        if FLAGS.tensorrt:
+            # We use a built-in TF helper to export variables to constants
+            output_graph_def = tf.graph_util.convert_variables_to_constants(
+                sess, # The session is used to retrieve the weights
+                tf.get_default_graph().as_graph_def(), # The graph_def is used to retrieve the nodes 
+                ['transformer/expand/conv3/conv/Sigmoid'] # The output node names are used to select the usefull nodes
+        )
+            
+            
+            trt_graph = trt.create_inference_graph(
+                input_graph_def=output_graph_def,
+                outputs=["transformer/expand/conv3/conv/Sigmoid"],
+                max_workspace_size_bytes=5 << 30,
+                max_batch_size=1,
+                precision_mode="FP16",  # TRT Engine precision "FP32","FP16" or "INT8"
+                minimum_segment_size=10)
+            
+            bottleneck_feat_O, content_img_ph_O, stylized_images_O = importer.import_graph_def(
+                graph_def=trt_graph, return_elements=["Conv/BiasAdd", "content_img_ph", "transformer/expand/conv3/conv/Sigmoid"])
+            bottleneck_feat_O = bottleneck_feat_O.outputs[0]
+            content_img_ph_O = content_img_ph_O.outputs[0]
+            stylized_images_O = stylized_images_O.outputs[0]
+
+            print("bottleneck opt:" + str(bottleneck_feat_O))
+            print(content_img_ph_O)
+            print(stylized_images_O)
+    
         # Gets the list of the input style images.
         #style_img_list = tf.gfile.Glob(FLAGS.style_images_paths)
         # if len(style_img_list) > FLAGS.maximum_styles_to_evaluate:
@@ -193,29 +252,33 @@ def main(unused_argv=None):
         # if style_i > FLAGS.maximum_styles_to_evaluate:
         #    break
         interpolation_weight = FLAGS.interpolation_weight       
-
+        activate_style = None
+        
         while True:
             start = timer()
             #calculating style isn't the major FPS bottleneck
-            activate_style = Style.objects.filter(is_active=True).first()
-            style_img_path = activate_style.source_file.path
-            print("current image is " + style_img_path)
-            style_img_name = "bricks"
-            style_image_np = image_utils.load_np_image_uint8(style_img_path)[:, :, :3]
+            current_style = Style.objects.filter(is_active=True).first()
+            if (activate_style != current_style):
+                activate_style = current_style
+                style_img_path = activate_style.source_file.path
+                print("current image is " + style_img_path)
+                style_img_name = "bricks"
+                style_image_np = image_utils.load_np_image_uint8(style_img_path)[:, :, :3]
+                style_image_np = cv2.resize(style_image_np, (1200,200))
 
-            # Saves preprocessed style image.
-            style_img_croped_resized_np = sess.run(
-                style_img_preprocessed, feed_dict={
-                    style_img_ph: style_image_np
-                })
-            #image_utils.save_np_image(style_img_croped_resized_np,
-            #                          os.path.join(FLAGS.output_dir,
-            #                                       '%s.jpg' % (style_img_name)))
+                # Saves preprocessed style image.
+                style_img_croped_resized_np = sess.run(
+                    style_img_preprocessed, feed_dict={
+                        style_img_ph: style_image_np
+                    })
+                #image_utils.save_np_image(style_img_croped_resized_np,
+                #                          os.path.join(FLAGS.output_dir,
+                #                                       '%s.jpg' % (style_img_name)))
             
-            # Computes bottleneck features of the style prediction network for the
-            # given style image.
-            style_params = sess.run(
-                bottleneck_feat, feed_dict={style_img_ph: style_image_np})
+                # Computes bottleneck features of the style prediction network for the
+                # given style image.
+                style_params = sess.run(
+                    bottleneck_feat, feed_dict={style_img_ph: style_image_np})
 
 
             
@@ -249,15 +312,29 @@ def main(unused_argv=None):
             # Interpolates between the parameters of the identity transform and
             # style parameters of the given style image.
             wi = interpolation_weight
-            stylized_image_res = sess.run(
-                stylized_images,
-                feed_dict={
-                    bottleneck_feat:
-                    identity_params * (1 - wi) + style_params * wi,
-                    content_img_ph:
-                    content_img_np
-            })
+            style_np = identity_params * (1 - wi) + style_params * wi
+            if FLAGS.tensorrt:
+                style_np= np.reshape(style_np, (1,100,1,1))
 
+                stylized_image_res = sess.run(
+                    stylized_images_O,
+                    feed_dict={
+                        bottleneck_feat_O:
+                        style_np,
+                        content_img_ph_O:
+                        content_img_np
+                    })
+            else:
+                stylized_image_res = sess.run(
+                    stylized_images,
+                    feed_dict={
+                        bottleneck_feat:
+                        style_np,
+                        content_img_ph:
+                        content_img_np
+                    })
+
+                
             end = timer()
             print(end - start)
             print(stylized_image_res.shape)
