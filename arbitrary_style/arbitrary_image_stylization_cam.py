@@ -29,6 +29,7 @@ import os
 import sys
 import django
 from screeninfo import get_monitors
+from PIL import ImageFont, ImageDraw, Image
 
 import numpy as np
 import tensorflow as tf
@@ -105,13 +106,18 @@ def display_np_image(image, fullscreen=False):
     # scipy.misc.imsave(buf, np.squeeze(image, 0), format=save_format)
     # cv2.imshow('frame', image)
     font = cv2.FONT_HERSHEY_PLAIN
+    font = ImageFont.truetype("../LEVIBRUSH.TTF", 70)
     helpText = "Bus leaves at 4am"
     #cv2.putText(image, helpText, (10,20), font, 30, (255,255,255), 20)
-    img_out = cv2.putText(image, 'bus leaving the playa at 2AM', (50, 50),
-    cv2.FONT_HERSHEY_SIMPLEX,
-                           1.0, (255, 0, 0), 3)
+    #img_out = cv2.putText(image, 'bus leaving the playa at 2AM', (50, 50),
+    img_pil = Image.fromarray(image)
+    draw = ImageDraw.Draw(img_pil)
+    draw.text((10,10), helpText, font=font, fill='rgb(0,0,0)')
+    #cv2.FONT_HERSHEY_SIMPLEX,
+    #                       1.0, (255, 0, 0), 3)
     #for m in get_monitors():
     #    print(str(m))
+    image = np.array(img_pil)
     
     if fullscreen:
         #hard code screensize
