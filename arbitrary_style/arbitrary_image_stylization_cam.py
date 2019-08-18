@@ -105,8 +105,8 @@ def display_np_image(image, fullscreen=False):
     image = np.squeeze(image, 0)
     # scipy.misc.imsave(buf, np.squeeze(image, 0), format=save_format)
     # cv2.imshow('frame', image)
-    font = cv2.FONT_HERSHEY_PLAIN
-    font = ImageFont.truetype("../LEVIBRUSH.TTF", 70)
+    #font = cv2.FONT_HERSHEY_PLAIN
+    font = ImageFont.truetype("./LEVIBRUSH.TTF", 70)
     helpText = "Bus leaves at 4am"
     #cv2.putText(image, helpText, (10,20), font, 30, (255,255,255), 20)
     #img_out = cv2.putText(image, 'bus leaving the playa at 2AM', (50, 50),
@@ -153,11 +153,13 @@ def main(unused_argv=None):
     # Instantiate video capture object.
     cap = cv2.VideoCapture(1)
 
+
     # Set resolution
     # if resolution is not None:
-    x_length, y_length = (1200, 200)
+    x_length, y_length = (1024, 1280)
     cap.set(3, x_length)  # 3 and 4 are OpenCV property IDs.
     cap.set(4, y_length)
+    cap.read()
     x_new = int(cap.get(3))
     y_new = int(cap.get(4))
     print('Resolution is: {0} by {1}'.format(x_new, y_new))
@@ -292,7 +294,8 @@ def main(unused_argv=None):
             ret, frame = cap.read()
             print("webcam image: " + str(frame.shape))
             #crop to get the weird 1200x200 format
-            content_img_np = frame[500:700, 200:1400 ]
+            content_img_np = frame[500:700, 80:1280 ]
+            #content_img_np = frame
             print("cropped image:" + str(content_img_np.shape))
             # content_img_np = image_utils.load_np_image_uint8(content_img_path)[:, :, :
             #                                                                        3]
